@@ -1,0 +1,454 @@
+openapi: 3.1.0
+info:
+  title: Smart Campus — Access Gate API
+  version: 1.0.0
+  description: |
+    API contract cho service Access Gate (A3) — FIT4110 Lab 03.
+    Service quản lý sự kiện quẹt thẻ ra/vào tòa nhà trong hệ thống Smart Campus.
+    Consumer: Access Gate gửi event cho Analytics qua Queue async.
+    REST API này phục vụ việc ghi nhận, truy vấn sự kiện và quản lý thẻ.
+servers:
+  - url: http://localhost:4010
+    description: Prism mock server
+  - url: http://localhost:8000
+    description: Local development server
+tags:
+  - name: access-events
+    description: Quản lý sự kiện quẹt thẻ ra/vào
+  - name: cards
+    description: Quản lý thẻ RFID
+  - name: system
+    description: Health và thông tin hệ thống
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Kiểm tra trạng thái service
+      security: []
+      responses:
+        "200":
+          description: Service đang hoạt động
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value:
+                    status: ok
+                    service: access-gate
+                    version: 1.0.0
+
+  /access-events:
+    post:
+      tags: [access-events]
+      operationId: createAccessEvent
+      summary: Ghi nhận một sự kiện quẹt thẻ tại cổng
+      description: |
+        Endpoint nhận sự kiện quẹt thẻ RFID tại cổng ra/vào.
+        Hệ thống sẽ kiểm tra thẻ hợp lệ, quyền truy cập, và trả kết quả allow/deny.
+        Đồng thời publish event lên Queue cho Analytics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessEventCreate"
+            examples:
+              valid_entry:
+                summary: Quẹt thẻ vào thành công
+                value:
+                  card_id: CARD-2026-001
+                  gate_id: GATE-01
+                  direction: in
+                  timestamp: "2026-05-19T08:30:00Z"
+              valid_exit:
+                summary: Quẹt thẻ ra thành công
+                value:
+                  card_id: CARD-2026-002
+                  gate_id: GATE-02
+                  direction: out
+                  timestamp: "2026-05-19T17:00:00Z"
+      responses:
+        "201":
+          description: Sự kiện đã được ghi nhận
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessEventResult"
+              examples:
+                allowed:
+                  summary: Quẹt thẻ thành công — cổng mở
+                  value:
+                    event_id: EVT-20260519-0001
+                    card_id: CARD-2026-001
+                    gate_id: GATE-01
+                    direction: in
+                    result: accepted
+                    zone_id: ZONE-A
+                    timestamp: "2026-05-19T08:30:00Z"
+                    created_at: "2026-05-19T08:30:01Z"
+                denied:
+                  summary: Quẹt thẻ bị từ chối
+                  value:
+                    event_id: EVT-20260519-0002
+                    card_id: CARD-EXPIRED-001
+                    gate_id: GATE-01
+                    direction: in
+                    result: denied
+                    deny_reason: expired_card
+                    zone_id: ZONE-A
+                    timestamp: "2026-05-19T08:31:00Z"
+                    created_at: "2026-05-19T08:31:01Z"
+        "400":
+          description: Request không hợp lệ
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                missing_card:
+                  value:
+                    type: https://smart-campus.local/problems/validation-error
+                    title: Validation error
+                    status: 400
+                    detail: card_id is required
+                    instance: /access-events
+                invalid_direction:
+                  value:
+                    type: https://smart-campus.local/problems/validation-error
+                    title: Validation error
+                    status: 400
+                    detail: "direction must be one of: in, out"
+                    instance: /access-events
+        "401":
+          description: Thiếu hoặc sai token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                unauthorized:
+                  value:
+                    type: https://smart-campus.local/problems/unauthorized
+                    title: Unauthorized
+                    status: 401
+                    detail: Missing or invalid bearer token
+                    instance: /access-events
+        "429":
+          description: Quá nhiều request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                rate_limited:
+                  value:
+                    type: https://smart-campus.local/problems/rate-limit
+                    title: Too Many Requests
+                    status: 429
+                    detail: Rate limit exceeded. Try again later.
+                    instance: /access-events
+
+    get:
+      tags: [access-events]
+      operationId: getAccessEvents
+      summary: Lấy danh sách sự kiện quẹt thẻ
+      parameters:
+        - in: query
+          name: gate_id
+          required: false
+          schema:
+            type: string
+          example: GATE-01
+        - in: query
+          name: direction
+          required: false
+          schema:
+            $ref: "#/components/schemas/Direction"
+        - in: query
+          name: result
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccessResult"
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 10
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        "200":
+          description: Danh sách sự kiện
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccessEventResult"
+                  total:
+                    type: integer
+                    example: 42
+              examples:
+                list:
+                  value:
+                    items:
+                      - event_id: EVT-20260519-0001
+                        card_id: CARD-2026-001
+                        gate_id: GATE-01
+                        direction: in
+                        result: accepted
+                        zone_id: ZONE-A
+                        timestamp: "2026-05-19T08:30:00Z"
+                        created_at: "2026-05-19T08:30:01Z"
+                    total: 1
+        "401":
+          description: Thiếu hoặc sai token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /cards/{id}:
+    get:
+      tags: [cards]
+      operationId: getCardById
+      summary: Lấy thông tin thẻ theo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: CARD-2026-001
+      responses:
+        "200":
+          description: Thông tin thẻ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+              examples:
+                found:
+                  value:
+                    card_id: CARD-2026-001
+                    holder_name: Nguyen Van A
+                    status: active
+                    issued_at: "2026-01-15T00:00:00Z"
+                    expires_at: "2027-01-15T00:00:00Z"
+        "404":
+          description: Thẻ không tồn tại
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                not_found:
+                  value:
+                    type: https://smart-campus.local/problems/not-found
+                    title: Not Found
+                    status: 404
+                    detail: Card CARD-NOT-EXIST not found
+                    instance: /cards/CARD-NOT-EXIST
+        "401":
+          description: Thiếu hoặc sai token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /cards:
+    post:
+      tags: [cards]
+      operationId: createCard
+      summary: Tạo thẻ mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CardCreate"
+            examples:
+              new_card:
+                value:
+                  holder_name: Nguyen Van B
+                  expires_at: "2027-06-01T00:00:00Z"
+      responses:
+        "201":
+          description: Thẻ đã được tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+              examples:
+                created:
+                  value:
+                    card_id: CARD-2026-099
+                    holder_name: Nguyen Van B
+                    status: active
+                    issued_at: "2026-05-19T10:00:00Z"
+                    expires_at: "2027-06-01T00:00:00Z"
+        "400":
+          description: Dữ liệu không hợp lệ
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                missing_holder:
+                  value:
+                    type: https://smart-campus.local/problems/validation-error
+                    title: Validation error
+                    status: 400
+                    detail: holder_name is required
+                    instance: /cards
+        "401":
+          description: Thiếu hoặc sai token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Direction:
+      type: string
+      enum: [in, out]
+    AccessResult:
+      type: string
+      enum: [accepted, denied, error]
+    DenyReason:
+      type: string
+      enum: [invalid_card, expired_card, permission_denied, gate_error, unknown]
+    CardStatus:
+      type: string
+      enum: [active, expired, revoked]
+    AccessEventCreate:
+      type: object
+      required: [card_id, gate_id, direction, timestamp]
+      properties:
+        card_id:
+          type: string
+          minLength: 3
+          example: CARD-2026-001
+        gate_id:
+          type: string
+          minLength: 1
+          example: GATE-01
+        direction:
+          $ref: "#/components/schemas/Direction"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-05-19T08:30:00Z"
+    AccessEventResult:
+      type: object
+      required: [event_id, card_id, gate_id, direction, result, timestamp, created_at]
+      properties:
+        event_id:
+          type: string
+          example: EVT-20260519-0001
+        card_id:
+          type: string
+          example: CARD-2026-001
+        gate_id:
+          type: string
+          example: GATE-01
+        direction:
+          $ref: "#/components/schemas/Direction"
+        result:
+          $ref: "#/components/schemas/AccessResult"
+        deny_reason:
+          $ref: "#/components/schemas/DenyReason"
+        zone_id:
+          type: string
+          example: ZONE-A
+        timestamp:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    Card:
+      type: object
+      required: [card_id, holder_name, status, issued_at, expires_at]
+      properties:
+        card_id:
+          type: string
+          example: CARD-2026-001
+        holder_name:
+          type: string
+          example: Nguyen Van A
+        status:
+          $ref: "#/components/schemas/CardStatus"
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+    CardCreate:
+      type: object
+      required: [holder_name, expires_at]
+      properties:
+        holder_name:
+          type: string
+          minLength: 2
+          example: Nguyen Van B
+        expires_at:
+          type: string
+          format: date-time
+          example: "2027-06-01T00:00:00Z"
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: access-gate
+        version:
+          type: string
+          example: 1.0.0
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string

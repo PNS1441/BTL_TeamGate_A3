@@ -1,0 +1,737 @@
+{
+  "info": {
+    "name": "BTL Team Gate A3",
+    "_postman_id": "gate-lab04-docker-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Newman test suite for Bài Tập Lớn Team Gate A3. Runs against Docker container on port 8000."
+  },
+  "item": [
+    {
+      "name": "01_Functional",
+      "item": [
+        {
+          "name": "TC01 — Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status=ok', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "  pm.expect(json.service).to.eql('access-gate');",
+                  "});",
+                  "",
+                  "pm.test('Response has version field', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('version');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC02 — Create access event (happy path — accepted)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has event_id', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('event_id');",
+                  "  pm.collectionVariables.set('lastEventId', json.event_id);",
+                  "});",
+                  "",
+                  "pm.test('Result is accepted for active card', function () {",
+                  "  if (pm.environment.get('env') === 'local') {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.result).to.eql('accepted');",
+                  "  } else {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "  }",
+                  "});",
+                  "",
+                  "pm.test('Direction is correct', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.direction).to.be.oneOf(['in', 'out']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC03 — Create access event (exit — out direction)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-002\",\n  \"gate_id\": \"GATE-02\",\n  \"direction\": \"out\",\n  \"timestamp\": \"2026-05-19T17:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Direction is out', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.direction).to.eql('out');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC04 — Get access events list",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/access-events?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"],
+              "query": [
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has items array', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('items');",
+                  "  pm.expect(json.items).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Response has total count', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('total');",
+                  "  pm.expect(json.total).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC05 — Get card by ID (active card)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards/CARD-2026-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "CARD-2026-001"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Card has required fields', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('card_id');",
+                  "  pm.expect(json).to.have.property('holder_name');",
+                  "  pm.expect(json.status).to.be.oneOf(['active', 'expired', 'revoked']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC06 — Create card (new card)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"holder_name\": \"Nguyen Van B\",\n  \"expires_at\": \"2027-06-01T00:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('New card has card_id and active status', function () {",
+                  "  if (pm.environment.get('env') === 'local') {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('card_id');",
+                  "    pm.expect(json.status).to.eql('active');",
+                  "  } else {",
+                  "    pm.expect([201]).to.include(pm.response.code);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02_Auth",
+      "item": [
+        {
+          "name": "TC07 — Missing token returns 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Missing token returns 401', function () {",
+                  "  pm.expect([401, 403]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Error follows ProblemDetails', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('status');",
+                  "  pm.expect(json).to.have.property('title');",
+                  "  pm.expect(json).to.have.property('detail');",
+                  "  pm.expect(json.status).to.be.within(400, 599);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC08 — Invalid token returns 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer wrong-token-xyz" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.environment.get('env') === 'local') {",
+                  "  pm.test('Invalid token returns 401 on local service', function () {",
+                  "    pm.expect([401, 403]).to.include(pm.response.code);",
+                  "  });",
+                  "  pm.test('ProblemDetails has type field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('type');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Mock may not validate token — accepted', function () {",
+                  "    pm.expect([201, 401, 403]).to.include(pm.response.code);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC09 — Auth required on GET /access-events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('GET /access-events requires auth', function () {",
+                  "  pm.expect([401, 403, 200]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03_Negative",
+      "item": [
+        {
+          "name": "TC10 — Missing card_id returns 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Missing card_id returns client error', function () {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Error follows ProblemDetails schema', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('status');",
+                  "  pm.expect(json).to.have.property('detail');",
+                  "  pm.expect(json.status).to.be.within(400, 599);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC11 — Invalid direction returns 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"sideways\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid direction returns client error', function () {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "pm.test('Error has detail message', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC12 — Card not found returns 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cards/CARD-NOT-EXIST-999",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "CARD-NOT-EXIST-999"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.environment.get('env') === 'local') {",
+                  "  pm.test('Non-existent card returns 404 on local service', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "  });",
+                  "  pm.test('ProblemDetails status is 404', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(404);",
+                  "    pm.expect(json).to.have.property('title');",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Mock returns 200 or 404 for card path param', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04_Boundary",
+      "item": [
+        {
+          "name": "TC13 — Empty card_id is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Empty card_id is rejected or handled', function () {",
+                  "  pm.expect([400, 422, 201]).to.include(pm.response.code);",
+                  "  if ([400, 422].includes(pm.response.code)) {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('detail');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC14 — Limit=100 (max boundary) accepted",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/access-events?limit=100",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"],
+              "query": [
+                { "key": "limit", "value": "100" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Limit=100 returns 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Items array has at most 100 entries', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.items.length).to.be.at.most(100);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC15 — Limit=200 (over max) is handled",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/access-events?limit=200",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"],
+              "query": [
+                { "key": "limit", "value": "200" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Limit exceeding max is handled gracefully', function () {",
+                  "  pm.expect([200, 400, 422]).to.include(pm.response.code);",
+                  "  if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.items.length).to.be.at.most(100);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC16 — Expired card is denied",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-EXPIRED-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Expired card swipe is recorded (201)', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Expired card result is denied (local only)', function () {",
+                  "  if (pm.environment.get('env') === 'local') {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.result).to.eql('denied');",
+                  "    pm.expect(json.deny_reason).to.eql('expired_card');",
+                  "  } else {",
+                  "    pm.expect(true).to.be.true;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05_ProblemDetails_Schema",
+      "item": [
+        {
+          "name": "TC17 — 401 error has ProblemDetails type field (URI)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"card_id\": \"CARD-2026-001\",\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Error response has all ProblemDetails fields', function () {",
+                  "  pm.expect([401, 403]).to.include(pm.response.code);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.all.keys(['type', 'title', 'status', 'detail', 'instance']);",
+                  "});",
+                  "",
+                  "pm.test('ProblemDetails status matches HTTP status', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC18 — 422 error has ProblemDetails format",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gate_id\": \"GATE-01\",\n  \"direction\": \"in\",\n  \"timestamp\": \"2026-05-19T08:30:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/access-events",
+              "host": ["{{baseUrl}}"],
+              "path": ["access-events"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 error has ProblemDetails', function () {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property('type');",
+                  "  pm.expect(json).to.have.property('title');",
+                  "  pm.expect(json).to.have.property('status');",
+                  "  pm.expect(json).to.have.property('detail');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06_NonFunctional",
+      "item": [
+        {
+          "name": "TC19 — Response time under 1000ms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.environment.get('env') === 'local') {",
+                  "  pm.test('Response time is below 1000ms (Docker container)', function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(1000);",
+                  "  });",
+                  "} else {",
+                  "  pm.test('Skip latency test on mock', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

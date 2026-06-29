@@ -1,0 +1,18 @@
+{
+  "name": "fit4110-lab05-docker-compose-readiness",
+  "version": "0.1.0",
+  "description": "FIT4110 Lab 05 - Docker Compose readiness and end-to-end verification for Smart Campus services",
+  "private": true,
+  "scripts": {
+    "mock:gate": "prism mock contracts/access-gate.openapi.yaml --host 0.0.0.0 --port 4010",
+    "lint:openapi": "spectral lint contracts/*.yaml",
+    "test:compose": "wait-on http-get://localhost:8000/health && newman run postman/collections/BTL_TeamGate_A3.postman_collection.json -e postman/environments/BTL_TeamGate_A3.postman_environment.json --reporters cli,htmlextra --reporter-htmlextra-export reports/newman-btl-teamgate.html"
+  },
+  "devDependencies": {
+    "@stoplight/prism-cli": "^5.10.0",
+    "@stoplight/spectral-cli": "^6.13.1",
+    "newman": "^6.2.1",
+    "newman-reporter-htmlextra": "^1.23.1",
+    "wait-on": "^8.0.1"
+  }
+}
